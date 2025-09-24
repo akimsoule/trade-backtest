@@ -1,0 +1,48 @@
+{
+  "name": "trade-backtest",
+  "version": "1.0.0",
+  "description": "Une librairie TypeScript pour le backtesting de stratégies de trading avec des indicateurs compatibles TradingView",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "test:coverage": "vitest --coverage",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prepare": "npm run clean && npm run build",
+    "example:roi": "tsx src/example/backtest-roi-wrapper.ts",
+    "example:combine-roi": "tsx src/example/backtest-combine-with-roi.ts",
+    "example:macd-dca": "tsx src/example/backtest-macd-dca.ts",
+    "example:buy-and-hold": "tsx src/example/backtest-buy-and-hold.ts"
+  },
+  "keywords": [
+    "trading",
+    "backtest",
+    "strategy",
+    "typescript",
+    "indicators",
+    "tradingview",
+    "finance"
+  ],
+  "author": "Akim Soulé",
+  "license": "MIT",
+  "dependencies": {
+    "indicatorts": "^2.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "files": [
+    "dist/**/*"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/akimsoule/trade-backtest.git"
+  }
+}
