@@ -12,4 +12,8 @@ describe("index and config exports", () => {
     expect(DEFAULT_PERIODS.ENV).toBeGreaterThan(0);
     expect(THRESHOLDS.VOLATILITY).toBeGreaterThan(0);
   });
+
+  it("BackTest class is exported", () => {
+    expect(typeof (pkg as any).BackTest).toBe("function");
+  });
 });

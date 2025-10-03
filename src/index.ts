@@ -8,3 +8,4 @@ export * from "./strategy/config";
 export * from "./strategy/macdMomentumDca";
 export * from "./strategy/combineWithRoi";
 export * from "./engine/tradingEngine";
+export * from "./backtest";
