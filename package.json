@@ -1,6 +1,6 @@
 {
   "name": "trade-backtest",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Une librairie TypeScript pour le backtesting de stratégies de trading avec des indicateurs compatibles TradingView",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
