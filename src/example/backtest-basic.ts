@@ -1,23 +1,23 @@
 import { BackTest } from "../backtest";
-import { type ExtendedAsset } from "../types";
 
-// Données synthétiques simple (BTCUSDT 5 jours)
-const data: ExtendedAsset[] = (
-  [
-    { symbol: "BTCUSDT", timestamp: new Date("2020-01-01"), close: 7000 },
-    { symbol: "BTCUSDT", timestamp: new Date("2020-01-02"), close: 7100 },
-    { symbol: "BTCUSDT", timestamp: new Date("2020-01-03"), close: 7300 },
-    { symbol: "BTCUSDT", timestamp: new Date("2020-01-04"), close: 7200 },
-    { symbol: "BTCUSDT", timestamp: new Date("2020-01-05"), close: 7400 },
-  ] as any
-) as ExtendedAsset[]; // Cast nécessaire car ExtendedAsset étend Asset (barres simplifiées ici)
+// Données synthétiques simples (BTCUSDT 5 jours) sous forme d'Asset indicatorts
+const closings = [7000, 7100, 7300, 7200, 7400];
+const dates = closings.map((_, i) => new Date(2020, 0, 1 + i));
+const asset: any = {
+  dates,
+  openings: [...closings],
+  highs: [...closings],
+  lows: [...closings],
+  closings,
+  volumes: new Array(closings.length).fill(0),
+};
 
 // Stratégie naïve: BUY au jour 2, SELL au jour 4 (indices 1 et 3)
-const strategyFn = () => ({
+const strategy = {
   longStrategy: [0, 1, 0, 0, 1],
   shortStrategy: [0, 0, 0, 1, 0],
   length: 5,
-});
+};
 
 const backtest = new BackTest({
   initialCapital: 10000,
@@ -27,7 +27,7 @@ const backtest = new BackTest({
   slippage: 0.001,
 });
 
-backtest.setData(data).addStrategy(strategyFn);
+backtest.setData(asset, "BTCUSDT").setStrategy(strategy);
 
 const result = backtest.run();
 

@@ -1,15 +1,19 @@
 import { BackTest } from "../backtest";
-import { type ExtendedAsset } from "../types";
+// ExtendedAsset supprimé
 import { macdMomentumDcaStrategy } from "../strategy/macdMomentumDca";
 
 // Petit dataset synthétique avec variations pour déclencher MACD
 const prices = [100, 102, 105, 103, 98, 95, 96, 99, 104, 108, 107, 110, 108, 105, 102, 101, 103, 106, 109, 107];
 
-const data: ExtendedAsset[] = prices.map((p, i) => ({
-  symbol: "BTCUSDT",
-  timestamp: new Date(2020, 0, 1 + i),
-  close: p,
-})) as any;
+const dates = prices.map((_, i) => new Date(2020, 0, 1 + i));
+const asset: any = {
+  dates,
+  openings: [...prices],
+  highs: [...prices],
+  lows: [...prices],
+  closings: prices,
+  volumes: new Array(prices.length).fill(0),
+};
 
 const backtest = new BackTest({
   initialCapital: 10000,
@@ -19,10 +23,10 @@ const backtest = new BackTest({
   slippage: 0.0005,
 });
 
-// Stratégie MACD Momentum DCA: paramètres par défaut (TP 5%, DCA sous -25%)
-const strategyFn = (asset: any) => macdMomentumDcaStrategy(asset, { allowShort: false });
+// Stratégie MACD Momentum DCA: paramètres par défaut (TP 5%, DCA sous -25%) pré-calculée
+const strategy = macdMomentumDcaStrategy(asset, { allowShort: false });
 
-backtest.setData(data).addStrategy(strategyFn);
+backtest.setData(asset, "BTCUSDT").setStrategy(strategy);
 const result = backtest.run();
 
 console.log("=== BackTest MACD Momentum DCA ===");

@@ -14,12 +14,11 @@ export interface Strategy {
 /** Fabrique de stratégie: prend un Asset et retourne des signaux */
 export type StrategyFn = (asset: Asset) => Strategy;
 
-/** Asset étendu avec les propriétés nécessaires pour le backtest */
-export interface ExtendedAsset extends Asset {
-  symbol: string;
-  timestamp: Date;
-  close: number;
-}
+// On n'utilise plus ExtendedAsset: on s'appuie directement sur Asset (de indicatorts)
+// Le BackTest suppose simplement que l'Asset fourni possède au moins:
+//  - timestamp: Date[] (ou dates)
+//  - closings: number[]
+// Pour compatibilité ascendante, on acceptera encore des objets avec symbol/timestamp/close en interne (cast) sans typer explicitement.
 
 /** Configuration du backtest */
 export interface BackTestConfig {

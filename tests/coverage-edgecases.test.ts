@@ -8,15 +8,23 @@ import { MixHoldSideEnum, OrderSideEnum, type Order } from "../src/types";
 describe("Coverage edge cases", () => {
   it("BackTest.run() jette si data manquante", () => {
     const bt = new BackTest({ initialCapital: 1000 });
-    bt.addStrategy(() => ({ longStrategy: [0], shortStrategy: [0], length: 1 }));
+  bt.setStrategy({ longStrategy: [0], shortStrategy: [0], length: 1 });
     expect(() => bt.run()).toThrowError();
   });
 
   it("BackTest.run() jette si stratégie manquante", () => {
     const bt = new BackTest({ initialCapital: 1000 });
-    // data présente mais pas de stratégie
-    // @ts-expect-error on n'a pas besoin de tous les champs pour ce test
-    bt.setData([{ symbol: "BTCUSDT", timestamp: new Date(), close: 100 }]);
+  // data présente mais pas de stratégie
+    const ts = new Date();
+    const asset: any = {
+      dates: [ts],
+      openings: [100],
+      highs: [100],
+      lows: [100],
+      closings: [100],
+      volumes: [0],
+    };
+    bt.setData(asset, "BTCUSDT");
     expect(() => bt.run()).toThrowError();
   });
 

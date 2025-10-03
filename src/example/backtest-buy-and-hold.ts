@@ -1,18 +1,22 @@
 import { BackTest } from "../backtest";
 import { buyAndHoldStrategy } from "../strategy/basic";
-import type { ExtendedAsset } from "../types";
+// ExtendedAsset supprimé
 
 const prices = [100, 101, 102, 103, 104, 105];
-const data: ExtendedAsset[] = prices.map((p, i) => ({
-  symbol: "BTCUSDT",
-  timestamp: new Date(2020, 0, 1 + i),
-  close: p,
-})) as any;
+const dates = prices.map((_, i) => new Date(2020, 0, 1 + i));
+const asset: any = {
+  dates,
+  openings: [...prices],
+  highs: [...prices],
+  lows: [...prices],
+  closings: prices,
+  volumes: new Array(prices.length).fill(0),
+};
 
-const strategyFn = (asset: any) => buyAndHoldStrategy(asset, 0, true);
+const strategy = buyAndHoldStrategy(asset, 0, true);
 
 const bt = new BackTest({ initialCapital: 10_000, makerFee: 0.0005, takerFee: 0.001, slippage: 0.0005 });
-const res = bt.setData(data).addStrategy(strategyFn).run();
+const res = bt.setData(asset, "BTCUSDT").setStrategy(strategy).run();
 
 console.log("=== BackTest Buy & Hold ===");
 console.log({ netProfit: res.netProfit.toFixed(2), trades: res.totalTrades, winRate: (res.winRate * 100).toFixed(1) + "%" });

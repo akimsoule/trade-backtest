@@ -3,18 +3,20 @@ import {
   type BackTestConfig,
   type BackTestResult,
   type EquityPoint,
-  type StrategyFn,
+  type Strategy,
   MixHoldSideEnum,
   OrderSideEnum,
   type Order,
-  type ExtendedAsset,
 } from "./types";
+import type { Asset } from "indicatorts";
 
 export class BackTest {
   private readonly config: Required<BackTestConfig>;
   private readonly engine: TradingEngine;
-  private readonly strategies: StrategyFn[] = [];
-  private data: ExtendedAsset[] = [];
+  // Stratégie unique (après demande utilisateur). Elle doit déjà contenir les tableaux de signaux.
+  private strategy: Strategy | null = null;
+  private asset: Asset | null = null;
+  private assetSymbol: string = "ASSET";
   private readonly equity: EquityPoint[] = [];
 
   constructor(config: BackTestConfig) {
@@ -28,28 +30,35 @@ export class BackTest {
       ...config,
     };
     this.engine = new TradingEngine([], this.config.leverage);
-    this.equity = [{
-      timestamp: new Date(),
-      equity: config.initialCapital,
-      drawdown: 0
-    }];
+    this.equity = [
+      {
+        timestamp: new Date(),
+        equity: config.initialCapital,
+        drawdown: 0,
+      },
+    ];
   }
 
-  /** Ajoute une stratégie au backtest */
-  addStrategy(strategy: StrategyFn): this {
-    this.strategies.push(strategy);
+  /** Définit la stratégie (objet pré-calculé avec longStrategy / shortStrategy) */
+  setStrategy(strategy: Strategy): this {
+    this.strategy = strategy;
     return this;
   }
 
-  /** Définit les données de marché à utiliser */
-  setData(data: ExtendedAsset[]): this {
-    this.data = data;
+  /**
+   * Définit l'Asset de marché (structure array indicatorts).
+   * @param asset Asset indicatorts (dates, openings, highs, lows, closings, volumes)
+   * @param symbol (optionnel) symbole utilisé pour les positions
+   */
+  setData(asset: Asset, symbol = "ASSET"): this {
+    this.asset = asset;
+    this.assetSymbol = symbol;
     return this;
   }
 
   private updateEquity(timestamp: Date, currentEquity: number): void {
     const peak = this.equity.length
-      ? Math.max(...this.equity.map(e => e.equity))
+      ? Math.max(...this.equity.map((e) => e.equity))
       : currentEquity;
     const drawdown = peak > 0 ? (peak - currentEquity) / peak : 0;
     this.equity.push({ timestamp, equity: currentEquity, drawdown });
@@ -57,15 +66,20 @@ export class BackTest {
 
   private calculateSharpeRatio(): number {
     if (this.equity.length < 2) return 0;
-    
+
     // Calculer les rendements journaliers
-    const returns = this.equity.slice(1).map((point, i) => 
-      (point.equity - this.equity[i].equity) / this.equity[i].equity
-    );
+    const returns = this.equity
+      .slice(1)
+      .map(
+        (point, i) =>
+          (point.equity - this.equity[i].equity) / this.equity[i].equity
+      );
 
     // Calculer la moyenne et l'écart-type des rendements
     const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
-    const variance = returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / returns.length;
+    const variance =
+      returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) /
+      returns.length;
     const stdDev = Math.sqrt(variance);
 
     // Ratio de Sharpe annualisé (252 jours de trading)
@@ -73,7 +87,7 @@ export class BackTest {
   }
 
   private processSignalsAtIndex(
-    asset: ExtendedAsset,
+    asset: any,
     currentEquity: number,
     longSignal: number,
     shortSignal: number
@@ -115,8 +129,10 @@ export class BackTest {
     }
   }
 
-  private updatePortfolio(asset: ExtendedAsset): number {
-    const stats = this.engine.getPortfolioStats({ [asset.symbol]: asset.close });
+  private updatePortfolio(asset: any): number {
+    const stats = this.engine.getPortfolioStats({
+      [asset.symbol]: asset.close,
+    });
     const pnlStats = this.engine.getRealizedPnLStats();
     const newEquity =
       this.config.initialCapital +
@@ -129,72 +145,80 @@ export class BackTest {
 
   /** Exécute le backtest */
   run(): BackTestResult {
-    if (!this.data.length || !this.strategies.length) {
-      throw new Error("Data and strategies must be set before running backtest");
+    if (!this.asset?.closings?.length || !this.strategy) {
+      throw new Error(
+        "Asset and strategy must be set before running backtest"
+      );
     }
 
     let currentEquity = this.config.initialCapital;
 
-    // Filtrer les données selon la période
-    const filteredData = this.data.filter(
-      d => d.timestamp >= this.config.startDate && d.timestamp <= this.config.endDate
-    );
+    // Indices filtrés par date
+    const datesArr: Date[] =
+      (this.asset.dates as any) || (this.asset as any).dates;
+    const closingsArr: number[] = this.asset.closings;
+    const filteredIndices = this.buildFilteredIndices(datesArr);
 
-    // Construire un Asset minimal pour calculer les signaux (basé sur filteredData)
-    const closings = filteredData.map(d => d.close);
-    const dates = filteredData.map(d => d.timestamp);
-    const assetForSignals = {
-      dates,
-      openings: closings.slice(),
-      highs: closings.slice(),
-      lows: closings.slice(),
-      closings,
-      volumes: new Array(closings.length).fill(0),
-    } as const;
-
-    // Calculer les signaux une fois (on prend la première stratégie pour l'instant)
-    const signals = this.strategies[0](assetForSignals as any);
+  // La stratégie est déjà fournie sous forme de signaux
+  const signals = this.strategy;
     this.equity.length = 0;
-    for (let i = 0; i < filteredData.length; i++) {
-      const asset = filteredData[i];
+    for (const i of filteredIndices) {
+      const bar = {
+        timestamp: datesArr[i],
+        close: closingsArr[i],
+        symbol: this.assetSymbol,
+      };
       const longSig = signals.longStrategy[i] ?? 0;
       const shortSig = signals.shortStrategy[i] ?? 0;
-      this.processSignalsAtIndex(asset, currentEquity, longSig, shortSig);
-      currentEquity = this.updatePortfolio(asset);
-      this.updateEquity(asset.timestamp, currentEquity);
+      this.processSignalsAtIndex(bar, currentEquity, longSig, shortSig);
+      currentEquity = this.updatePortfolio(bar);
+      this.updateEquity(bar.timestamp, currentEquity);
     }
 
     // Calculer les statistiques finales
-    const lastPrice = { [filteredData[filteredData.length - 1].symbol]: filteredData[filteredData.length - 1].close };
+    const lastIdx = filteredIndices[filteredIndices.length - 1];
+    const lastPrice = { [this.assetSymbol]: closingsArr[lastIdx] };
     const finalStats = this.engine.getPortfolioStats(lastPrice);
     const realizedStats = this.engine.getRealizedPnLStats();
     const trades = this.engine.getClosedTrades();
-    const winningTrades = trades.filter(t => t.realizedPnl > 0);
+    const winningTrades = trades.filter((t) => t.realizedPnl > 0);
 
     // Baseline Buy & Hold (sans frais/slippage) sur 1 unité notionnelle: capital varie proportionnellement au prix
     const bhEquity: EquityPoint[] = [];
-    if (filteredData.length > 0) {
-      const p0 = filteredData[0].close;
+    if (filteredIndices.length > 0) {
+      const p0 = closingsArr[filteredIndices[0]];
       const initial = this.config.initialCapital;
-      for (const d of filteredData) {
-        const equity = initial * (d.close / p0);
-        const peak = bhEquity.length ? Math.max(...bhEquity.map(e => e.equity)) : equity;
+      for (const i of filteredIndices) {
+        const close = closingsArr[i];
+        const ts = datesArr[i];
+        const equity = initial * (close / p0);
+        const peak = bhEquity.length
+          ? Math.max(...bhEquity.map((e) => e.equity))
+          : equity;
         const drawdown = peak > 0 ? (peak - equity) / peak : 0;
-        bhEquity.push({ timestamp: d.timestamp, equity, drawdown });
+        bhEquity.push({ timestamp: ts, equity, drawdown });
       }
     }
-    const bhNet = bhEquity.length ? bhEquity[bhEquity.length - 1].equity - this.config.initialCapital : 0;
-    const bhTotalReturn = bhEquity.length ? (bhEquity[bhEquity.length - 1].equity - this.config.initialCapital) / this.config.initialCapital : 0;
+    const bhNet = bhEquity.length
+      ? bhEquity[bhEquity.length - 1].equity - this.config.initialCapital
+      : 0;
+    const bhTotalReturn = bhEquity.length
+      ? (bhEquity[bhEquity.length - 1].equity - this.config.initialCapital) /
+        this.config.initialCapital
+      : 0;
 
     return {
-      netProfit: realizedStats.totalRealizedPnL - realizedStats.totalFeesClosed - finalStats.totalFeesOpen,
+      netProfit:
+        realizedStats.totalRealizedPnL -
+        realizedStats.totalFeesClosed -
+        finalStats.totalFeesOpen,
       grossProfit: realizedStats.totalRealizedPnL,
       totalFees: realizedStats.totalFeesClosed + finalStats.totalFeesOpen,
       totalTrades: trades.length,
       winningTrades: winningTrades.length,
       losingTrades: trades.length - winningTrades.length,
       winRate: trades.length > 0 ? winningTrades.length / trades.length : 0,
-      maxDrawdown: Math.max(...this.equity.map(e => e.drawdown)),
+      maxDrawdown: Math.max(...this.equity.map((e) => e.drawdown)),
       sharpeRatio: this.calculateSharpeRatio(),
       positions: finalStats.positions,
       trades,
@@ -204,7 +228,22 @@ export class BackTest {
         netProfit: bhNet,
         totalReturn: bhTotalReturn,
       },
-      outperformanceVsBuyAndHold: (realizedStats.totalRealizedPnL - realizedStats.totalFeesClosed - finalStats.totalFeesOpen) - bhNet,
+      outperformanceVsBuyAndHold:
+        realizedStats.totalRealizedPnL -
+        realizedStats.totalFeesClosed -
+        finalStats.totalFeesOpen -
+        bhNet,
     };
+  }
+  private buildFilteredIndices(datesArr: Date[]): number[] {
+    const res: number[] = [];
+    // Tolérance: si startDate / endDate sont undefined dans la config fournie, on applique des bornes extrêmes
+    const start = this.config.startDate ?? new Date(0);
+    const end = this.config.endDate ?? new Date(8640000000000000);
+    for (let i = 0; i < datesArr.length; i++) {
+      const ts = datesArr[i];
+      if (ts >= start && ts <= end) res.push(i);
+    }
+    return res;
   }
 }

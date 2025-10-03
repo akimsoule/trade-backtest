@@ -17,21 +17,25 @@ npm install trade-backtest indicatorts
 import { BackTest, macdStrategy } from "trade-backtest";
 import type { Asset } from "indicatorts";
 
-// Construire un Asset simple (min: timestamp, close)
+// Construire un Asset au format indicatorts (arrays parallèles)
 const prices = [100, 101, 102, 103, 104, 105];
-const data: Asset[] = prices.map((p, i) => ({
-	// Les autres champs OHLCV sont supportés par indicatorts mais pas requis ici
-	timestamp: new Date(2020, 0, 1 + i),
-	close: p,
-})) as any;
+const dates = prices.map((_, i) => new Date(2020, 0, 1 + i));
+const asset: Asset = {
+	dates,
+	openings: [...prices],
+	highs: [...prices],
+	lows: [...prices],
+	closings: prices,
+	volumes: new Array(prices.length).fill(0),
+} as any;
 
-// 1) Choisir une stratégie (ici MACD par défaut)
-const strategyFn = (asset: Asset) => macdStrategy(asset);
+// 1) Générer la stratégie (les signaux sont calculés une fois hors BackTest)
+const strategy = macdStrategy(asset);
 
-// 2) Lancer le backtest
+// 2) Lancer le backtest (nouvelle API: setStrategy au lieu de addStrategy)
 const res = new BackTest({ initialCapital: 10_000, makerFee: 0.0005, takerFee: 0.001, slippage: 0.0005 })
-	.setData(data as any) // Asset ou ExtendedAsset
-	.addStrategy(strategyFn)
+	.setData(asset, "BTCUSDT")
+	.setStrategy(strategy)
 	.run();
 
 console.log({ netProfit: res.netProfit, totalTrades: res.totalTrades, winRate: res.winRate });
@@ -69,12 +73,13 @@ import type { Asset } from "indicatorts";
 
 const data: Asset[] = /* ... */ [] as any;
 
-const strategyFn = (asset: Asset) => {
-	const base = macdStrategy(asset);
-	return roiStrategy(asset, base, 5, -25); // Take Profit 5%, DCA si -25%
-};
+const base = macdStrategy(asset);
+const strategy = roiStrategy(asset, base, 5, -25); // Take Profit 5%, DCA si -25%
 
-const res = new BackTest({ initialCapital: 10_000 }).setData(data as any).addStrategy(strategyFn).run();
+const res = new BackTest({ initialCapital: 10_000 })
+	.setData(asset as any, "BTCUSDT")
+	.setStrategy(strategy)
+	.run();
 console.log(res.netProfit, res.baselineBuyAndHold, res.outperformanceVsBuyAndHold);
 ```
 
@@ -86,13 +91,14 @@ import type { Asset } from "indicatorts";
 
 const data: Asset[] = /* ... */ [] as any;
 
-const strategyFn = (asset: Asset) => {
-	const s1 = doubleEmaStrategy(asset, 3, 7);
-	const s2 = rsiStrategy(asset);
-	return combineWithRoi(asset, [s1, s2], { op: "OR", targetRoi: 5, dcaThreshold: -25 });
-};
+const s1 = doubleEmaStrategy(asset, 3, 7);
+const s2 = rsiStrategy(asset);
+const combined = combineWithRoi(asset, [s1, s2], { op: "OR", targetRoi: 5, dcaThreshold: -25 });
 
-const res = new BackTest({ initialCapital: 10_000 }).setData(data as any).addStrategy(strategyFn).run();
+const res = new BackTest({ initialCapital: 10_000 })
+  .setData(asset as any, "BTCUSDT")
+  .setStrategy(combined)
+  .run();
 ```
 
 ## Baseline Buy & Hold et outperformance
@@ -108,10 +114,14 @@ Remarque: si votre stratégie applique des frais/slippage, son PnL net sera inf�
 
 ```bash
 # nécessite tsx comme devDep (déjà configuré dans ce repo)
+npm run example:basic
 npm run example:roi
 npm run example:combine-roi
 npm run example:macd-dca
 npm run example:buy-and-hold
+
+# Exécuter tous les exemples en série:
+npm run example:all
 ```
 
 ## Tests et couverture
@@ -129,7 +139,21 @@ npm run build
 
 ## TypeScript et types
 
-Le package fournit `types` via `dist/index.d.ts`. Les types clés incluent `Strategy`, `StrategyFn`, `BackTestConfig`, `BackTestResult`, et des types de moteur de trading pour des cas avancés.
+Le package fournit `types` via `dist/index.d.ts`. Les types clés incluent `Strategy`, `BackTestConfig`, `BackTestResult`, et des types de moteur de trading pour des cas avancés.
+
+### Changement majeur (breaking) introduit en 2.0.0
+
+- L’API utilise maintenant `setStrategy(strategy: Strategy)` (objet de signaux pré-calculés) à la place de `addStrategy(strategyFn)`.
+- Pré-calculer vos signaux: `const strategy = macdStrategy(asset); backtest.setStrategy(strategy);`
+
+Si vous aviez du code ancien:
+```ts
+// Ancien
+bt.addStrategy((asset) => macdStrategy(asset));
+// Nouveau
+const strat = macdStrategy(asset);
+bt.setStrategy(strat);
+```
 
 ## Licence
 
